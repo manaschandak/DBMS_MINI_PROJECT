@@ -9,22 +9,38 @@ export default function Dashboard() {
 
   return (
     <div>
-      <h2>Battery Fleet</h2>
-      <table width="100%" cellPadding={8}>
-        <thead><tr><th>ID</th><th>Model</th><th>SoH %</th><th>Temp °C</th><th>Risk</th><th>Anomaly</th></tr></thead>
-        <tbody>
-          {rows.map((b) => (
-            <tr key={b.id}>
-              <td><Link to={`/battery/${b.id}`}>{b.id}</Link></td>
-              <td>{b.model}</td>
-              <td>{b.soh_pct}</td>
-              <td>{b.temperature_c}</td>
-              <td><RiskBadge level={b.risk_level} /></td>
-              <td>{b.is_anomaly ? "⚠️" : "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <h1>Battery fleet</h1>
+      <div className="muted">{rows.length} packs monitored, riskiest first</div>
+
+      <div className="summary">
+        <span><i className="dot high" /><b>{count("high")}</b> high risk</span>
+        <span><i className="dot medium" /><b>{count("medium")}</b> needs attention</span>
+        <span><i className="dot low" /><b>{count("low")}</b> healthy</span>
+      </div>
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Battery</th><th>Health</th><th>Temperature</th><th>Risk</th><th>Anomaly</th></tr>
+          </thead>
+          <tbody>
+            {sorted.map((b) => (
+              <tr key={b.id}>
+                <td><Link to={`/battery/${b.id}`}>{b.model}</Link></td>
+                <td>{b.soh_pct}%</td>
+                <td>
+                  <div className="temp">
+                    <span className="temp-val">{b.temperature_c}°C</span>
+                    <div className="gauge"><i style={{ left: `${gaugePos(b.temperature_c)}%` }} /></div>
+                  </div>
+                </td>
+                <td><RiskBadge level={b.risk_level} /></td>
+                <td>{b.is_anomaly ? <span className="flag">Detected</span> : <span className="muted">None</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

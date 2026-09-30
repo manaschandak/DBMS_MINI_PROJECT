@@ -15,16 +15,22 @@ export default function Alerts() {
     <div>
       <h2>Alerts</h2>
       {items.map((a) => (
-        <div key={a.id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12, marginBottom: 10 }}>
-          <RiskBadge level={a.risk_level} /> Battery {a.battery_id}: {a.message}
-          <div style={{ marginTop: 8 }}>
+        <div key={a.id} className={`alert ${a.risk_level}`}>
+          <div className="alert-top">
+            <RiskBadge level={a.risk_level} />
+            <strong>{a.message}</strong>
+          </div>
+          <div className="muted">
+            <Link to={`/battery/${a.battery_id}`}>Battery {a.battery_id}</Link>
+          </div>
+          <div className="alert-actions">
             {a.status === "open" ? (
               <>
-                <button onClick={() => give(a.id, "confirmed")}>Confirm</button>{" "}
-                <button onClick={() => give(a.id, "false_alarm")}>False alarm</button>
+                <button className="btn primary" onClick={() => give(a.id, "confirmed")}>Confirm alert</button>
+                <button className="btn" onClick={() => give(a.id, "false_alarm")}>Mark as false alarm</button>
               </>
             ) : (
-              <em>Marked: {a.status}</em>
+              <span className="muted">{a.status === "confirmed" ? "Confirmed" : "Marked as false alarm"}</span>
             )}
           </div>
         </div>

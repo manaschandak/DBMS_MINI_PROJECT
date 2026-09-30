@@ -6,11 +6,16 @@ import Alerts from "./pages/Alerts";
 export default function App() {
   return (
     <BrowserRouter>
-      <nav style={{ display: "flex", gap: 16, padding: 12, borderBottom: "1px solid #ddd" }}>
-        <NavLink to="/">Dashboard</NavLink>
-        <NavLink to="/alerts">Alerts</NavLink>
-      </nav>
-      <main style={{ padding: 20 }}>
+      <header className="topbar">
+        <div className="wrap bar">
+          <span className="brand">Battery thermal monitor</span>
+          <nav>
+            <NavLink to="/" end>Fleet</NavLink>
+            <NavLink to="/alerts">Alerts</NavLink>
+          </nav>
+        </div>
+      </header>
+      <main className="wrap">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/battery/:id" element={<BatteryDetail />} />
