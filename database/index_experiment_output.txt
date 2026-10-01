@@ -1,0 +1,100 @@
+SET
+DROP TABLE
+CREATE TABLE
+INSERT 0 200000
+ANALYZE
+===== Rows loaded =====
+ rows_loaded 
+-------------
+      200000
+(1 row)
+
+
+===== BEFORE INDEXES - Query 1: one sensor, one day =====
+                                                                                             QUERY PLAN                                                                                             
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize Aggregate  (cost=4534.41..4534.42 rows=1 width=40) (actual time=32.013..36.479 rows=1.00 loops=1)
+   Buffers: shared hit=1471
+   ->  Gather  (cost=4534.19..4534.40 rows=2 width=40) (actual time=9.825..36.467 rows=2.00 loops=1)
+         Workers Planned: 1
+         Workers Launched: 1
+         Buffers: shared hit=1471
+         ->  Partial Aggregate  (cost=3534.19..3534.20 rows=1 width=40) (actual time=4.739..4.739 rows=1.00 loops=2)
+               Buffers: shared hit=1471
+               ->  Parallel Seq Scan on temperature_reading_perf  (cost=0.00..3529.82 rows=872 width=6) (actual time=0.541..4.648 rows=720.00 loops=2)
+                     Filter: ((recorded_at >= '2026-09-02 00:00:00+05:30'::timestamp with time zone) AND (recorded_at < '2026-09-03 00:00:00+05:30'::timestamp with time zone) AND (sensor_id = 7))
+                     Rows Removed by Filter: 99280
+                     Buffers: shared hit=1471
+ Planning:
+   Buffers: shared hit=35
+ Planning Time: 0.107 ms
+ Execution Time: 36.528 ms
+(16 rows)
+
+
+===== BEFORE INDEXES - Query 2: 20 hottest readings above 50 C =====
+                                                                QUERY PLAN                                                                
+------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=3991.44..3991.49 rows=20 width=18) (actual time=13.348..13.351 rows=20.00 loops=1)
+   Buffers: shared hit=1471
+   ->  Sort  (cost=3991.44..3993.36 rows=768 width=18) (actual time=13.347..13.348 rows=20.00 loops=1)
+         Sort Key: temperature_c DESC
+         Sort Method: top-N heapsort  Memory: 27kB
+         Buffers: shared hit=1471
+         ->  Seq Scan on temperature_reading_perf  (cost=0.00..3971.00 rows=768 width=18) (actual time=0.101..13.288 rows=202.00 loops=1)
+               Filter: (temperature_c > '50'::numeric)
+               Rows Removed by Filter: 199798
+               Buffers: shared hit=1471
+ Planning:
+   Buffers: shared hit=13
+ Planning Time: 0.112 ms
+ Execution Time: 13.364 ms
+(14 rows)
+
+CREATE INDEX
+CREATE INDEX
+ANALYZE
+
+===== AFTER INDEXES - Query 1: one sensor, one day =====
+                                                                                            QUERY PLAN                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=1574.46..1574.47 rows=1 width=40) (actual time=0.392..0.392 rows=1.00 loops=1)
+   Buffers: shared hit=11 read=8
+   ->  Bitmap Heap Scan on temperature_reading_perf  (cost=41.79..1567.64 rows=1362 width=6) (actual time=0.157..0.251 rows=1440.00 loops=1)
+         Recheck Cond: ((sensor_id = 7) AND (recorded_at >= '2026-09-02 00:00:00+05:30'::timestamp with time zone) AND (recorded_at < '2026-09-03 00:00:00+05:30'::timestamp with time zone))
+         Heap Blocks: exact=11
+         Buffers: shared hit=11 read=8
+         ->  Bitmap Index Scan on idx_perf_sensor_time  (cost=0.00..41.45 rows=1362 width=0) (actual time=0.142..0.142 rows=1440.00 loops=1)
+               Index Cond: ((sensor_id = 7) AND (recorded_at >= '2026-09-02 00:00:00+05:30'::timestamp with time zone) AND (recorded_at < '2026-09-03 00:00:00+05:30'::timestamp with time zone))
+               Index Searches: 1
+               Buffers: shared read=8
+ Planning:
+   Buffers: shared hit=15 read=2
+ Planning Time: 0.246 ms
+ Execution Time: 0.416 ms
+(14 rows)
+
+
+===== AFTER INDEXES - Query 2: 20 hottest readings above 50 C =====
+                                                                           QUERY PLAN                                                                            
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.42..64.40 rows=20 width=18) (actual time=0.013..0.053 rows=20.00 loops=1)
+   Buffers: shared hit=23
+   ->  Index Scan Backward using idx_perf_temp on temperature_reading_perf  (cost=0.42..2486.01 rows=777 width=18) (actual time=0.012..0.050 rows=20.00 loops=1)
+         Index Cond: (temperature_c > '50'::numeric)
+         Index Searches: 1
+         Buffers: shared hit=23
+ Planning:
+   Buffers: shared hit=3 read=3
+ Planning Time: 0.130 ms
+ Execution Time: 0.062 ms
+(10 rows)
+
+
+===== Cost of the indexes: disk space =====
+ table_size | sensor_time_index | temp_index 
+------------+-------------------+------------
+ 11 MB      | 6184 kB           | 4416 kB
+(1 row)
+
+DROP TABLE

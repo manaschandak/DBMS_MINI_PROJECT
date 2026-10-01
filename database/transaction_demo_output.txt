@@ -1,0 +1,59 @@
+﻿===== 0. Starting row counts =====
+ temperature_rows | electrical_rows 
+------------------+-----------------
+                9 |               6
+(1 row)
+
+
+===== 1. Batch with one bad row: the WHOLE batch must be rolled back =====
+BEGIN
+INSERT 0 2
+INSERT 0 2
+-- Inside the transaction the good rows are visible (4 more rows in total):
+ temperature_rows | electrical_rows 
+------------------+-----------------
+               11 |               8
+(1 row)
+
+-- Now a BAD row: it repeats an existing (sensor_id, recorded_at) key. Expect an ERROR:
+psql:database/16_transaction_demo.sql:48: ERROR:  duplicate key value violates unique constraint "temperature_reading_pkey"
+DETAIL:  Key (sensor_id, recorded_at)=(2, 2026-10-01 09:00:00+05:30) already exists.
+-- The transaction is now aborted, so even a simple command is refused. Expect an ERROR:
+psql:database/16_transaction_demo.sql:51: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK
+-- After ROLLBACK the counts must be back to the starting numbers:
+ temperature_rows | electrical_rows 
+------------------+-----------------
+                9 |               6
+(1 row)
+
+
+===== 2. Same batch, but the bad row is isolated with a SAVEPOINT =====
+BEGIN
+INSERT 0 2
+INSERT 0 2
+SAVEPOINT
+-- Bad row again (duplicate key). Expect an ERROR:
+psql:database/16_transaction_demo.sql:86: ERROR:  duplicate key value violates unique constraint "temperature_reading_pkey"
+DETAIL:  Key (sensor_id, recorded_at)=(2, 2026-10-01 09:00:00+05:30) already exists.
+-- Undo only the bad row; the earlier good rows stay:
+ROLLBACK
+-- The transaction works again, so add one more good row:
+INSERT 0 1
+COMMIT
+-- After COMMIT the good rows are kept (3 temperature + 2 electrical more than the start):
+ temperature_rows | electrical_rows 
+------------------+-----------------
+               12 |               8
+(1 row)
+
+
+===== 3. Clean up: delete only the rows this script created =====
+DELETE 3
+DELETE 2
+-- Final counts, same as the start:
+ temperature_rows | electrical_rows 
+------------------+-----------------
+                9 |               6
+(1 row)
+
