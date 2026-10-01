@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict F4RsGcp2iXQSREb7fpL8YVAhtjx16OkipYNgPGnKzCu7AEARycz0T62gpI2DJeL
+\restrict 37kgtAXZdEU389YfGUdmd2IvLe5XzimGApT8acnfwHJEH2f4uGoEwQVAzcO3P5c
 
 -- Dumped from database version 18.6
 -- Dumped by pg_dump version 18.6
@@ -18,6 +18,49 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
+
+--
+-- Name: fn_create_alert_for_risk(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.fn_create_alert_for_risk() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    v_serial       TEXT;
+    v_risk_type    TEXT;
+    v_priority_id  INTEGER;
+BEGIN
+    -- Only HIGH and CRITICAL raise an alert; LOW and MEDIUM do not.
+    IF NEW.final_risk_level IN ('HIGH', 'CRITICAL') THEN
+
+        SELECT b.serial_number, m.risk_type
+          INTO v_serial, v_risk_type
+          FROM prediction_result pr
+          JOIN battery b  ON pr.battery_id = b.battery_id
+          JOIN ai_model m ON pr.model_id = m.model_id
+         WHERE pr.prediction_id = NEW.prediction_id;
+
+        -- priority_code in alert_priority matches the risk level name (HIGH, CRITICAL)
+        SELECT alert_priority_id
+          INTO v_priority_id
+          FROM alert_priority
+         WHERE priority_code = NEW.final_risk_level;
+
+        INSERT INTO alert (assessment_id, alert_priority_id, message, status)
+        VALUES (
+            NEW.assessment_id,
+            v_priority_id,
+            format('AUTO: %s %s risk on %s',
+                   NEW.final_risk_level, lower(v_risk_type), v_serial),
+            'OPEN'
+        );
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
 
 SET default_tablespace = '';
 
@@ -662,6 +705,88 @@ ALTER TABLE public.training_dataset ALTER COLUMN dataset_id ADD GENERATED ALWAYS
 
 
 --
+-- Name: v_latest_risk; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_latest_risk AS
+ SELECT DISTINCT ON (pr.battery_id, m.risk_type) pr.battery_id,
+    m.risk_type,
+    ra.final_risk_level,
+    ra.rule_override,
+    ra.assessed_at
+   FROM ((public.risk_assessment ra
+     JOIN public.prediction_result pr ON ((ra.prediction_id = pr.prediction_id)))
+     JOIN public.ai_model m ON ((pr.model_id = m.model_id)))
+  ORDER BY pr.battery_id, m.risk_type, ra.assessed_at DESC;
+
+
+--
+-- Name: v_battery_overview; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_battery_overview AS
+ SELECT b.battery_id,
+    b.serial_number,
+    mf.manufacturer_name,
+    c.chemistry_code,
+    b.status,
+    ( SELECT max(lt.temperature_c) AS max
+           FROM (public.sensor s
+             CROSS JOIN LATERAL ( SELECT tr.temperature_c
+                   FROM public.temperature_reading tr
+                  WHERE (tr.sensor_id = s.sensor_id)
+                  ORDER BY tr.recorded_at DESC
+                 LIMIT 1) lt)
+          WHERE (s.battery_id = b.battery_id)) AS latest_max_temp_c,
+    lt_risk.final_risk_level AS thermal_risk,
+    lh_risk.final_risk_level AS health_risk,
+    ( SELECT count(*) AS count
+           FROM ((public.alert a
+             JOIN public.risk_assessment ra ON ((a.assessment_id = ra.assessment_id)))
+             JOIN public.prediction_result pr ON ((ra.prediction_id = pr.prediction_id)))
+          WHERE ((pr.battery_id = b.battery_id) AND ((a.status)::text = 'OPEN'::text))) AS open_alerts
+   FROM ((((public.battery b
+     JOIN public.manufacturer mf ON ((b.manufacturer_id = mf.manufacturer_id)))
+     JOIN public.chemistry c ON ((b.chemistry_id = c.chemistry_id)))
+     LEFT JOIN public.v_latest_risk lt_risk ON (((lt_risk.battery_id = b.battery_id) AND ((lt_risk.risk_type)::text = 'THERMAL'::text))))
+     LEFT JOIN public.v_latest_risk lh_risk ON (((lh_risk.battery_id = b.battery_id) AND ((lh_risk.risk_type)::text = 'HEALTH'::text))));
+
+
+--
+-- Name: v_chemistry_comparison; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_chemistry_comparison AS
+ WITH latest_aging AS (
+         SELECT DISTINCT ON (aging_record.battery_id) aging_record.battery_id,
+            aging_record.cycle_count,
+            aging_record.internal_resistance_mohm,
+            aging_record.capacity_ah
+           FROM public.aging_record
+          ORDER BY aging_record.battery_id, aging_record.measured_at DESC
+        ), peak_temp AS (
+         SELECT s.battery_id,
+            max(tr.temperature_c) AS peak_temp_c
+           FROM (public.temperature_reading tr
+             JOIN public.sensor s ON ((tr.sensor_id = s.sensor_id)))
+          GROUP BY s.battery_id
+        )
+ SELECT c.chemistry_code,
+    c.chemistry_name,
+    count(DISTINCT b.battery_id) AS battery_count,
+    round(avg(la.cycle_count), 0) AS avg_cycles,
+    round(avg(la.internal_resistance_mohm), 2) AS avg_resistance_mohm,
+    round(avg(((la.capacity_ah / b.nominal_capacity_ah) * (100)::numeric)), 1) AS avg_capacity_pct_of_nominal,
+    round(avg(pt.peak_temp_c), 1) AS avg_peak_temp_c,
+    max(pt.peak_temp_c) AS max_peak_temp_c
+   FROM (((public.chemistry c
+     LEFT JOIN public.battery b ON ((b.chemistry_id = c.chemistry_id)))
+     LEFT JOIN latest_aging la ON ((la.battery_id = b.battery_id)))
+     LEFT JOIN peak_temp pt ON ((pt.battery_id = b.battery_id)))
+  GROUP BY c.chemistry_code, c.chemistry_name;
+
+
+--
 -- Name: v_live_accuracy; Type: VIEW; Schema: public; Owner: -
 --
 
@@ -677,6 +802,39 @@ CREATE VIEW public.v_live_accuracy AS
      JOIN public.prediction_result p ON ((f.prediction_id = p.prediction_id)))
      JOIN public.ai_model m ON ((p.model_id = m.model_id)))
   GROUP BY m.model_id, m.model_name, m.risk_type;
+
+
+--
+-- Name: v_open_alerts; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_open_alerts AS
+ SELECT a.alert_id,
+    ap.priority_code,
+    ap.severity_level,
+    b.serial_number,
+    ra.final_risk_level,
+    a.message,
+    a.status,
+    a.created_at
+   FROM ((((public.alert a
+     JOIN public.alert_priority ap ON ((a.alert_priority_id = ap.alert_priority_id)))
+     JOIN public.risk_assessment ra ON ((a.assessment_id = ra.assessment_id)))
+     JOIN public.prediction_result pr ON ((ra.prediction_id = pr.prediction_id)))
+     JOIN public.battery b ON ((pr.battery_id = b.battery_id)))
+  WHERE ((a.status)::text = 'OPEN'::text);
+
+
+--
+-- Name: v_risk_distribution; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_risk_distribution AS
+ SELECT risk_type,
+    final_risk_level,
+    count(*) AS battery_count
+   FROM public.v_latest_risk
+  GROUP BY risk_type, final_risk_level;
 
 
 --
@@ -984,6 +1142,48 @@ ALTER TABLE ONLY public.training_dataset
 
 
 --
+-- Name: idx_alert_assessment; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_alert_assessment ON public.alert USING btree (assessment_id);
+
+
+--
+-- Name: idx_alert_open; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_alert_open ON public.alert USING btree (alert_priority_id, created_at DESC) WHERE ((status)::text = 'OPEN'::text);
+
+
+--
+-- Name: idx_anomaly_detected_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_anomaly_detected_at ON public.sensor_anomaly USING btree (detected_at DESC);
+
+
+--
+-- Name: idx_battery_chemistry; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_battery_chemistry ON public.battery USING btree (chemistry_id);
+
+
+--
+-- Name: idx_battery_manufacturer; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_battery_manufacturer ON public.battery USING btree (manufacturer_id);
+
+
+--
+-- Name: idx_cfd_twin_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cfd_twin_time ON public.cfd_simulation USING btree (twin_id, run_at DESC);
+
+
+--
 -- Name: idx_feedback_prediction; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -995,6 +1195,69 @@ CREATE INDEX idx_feedback_prediction ON public.feedback USING btree (prediction_
 --
 
 CREATE INDEX idx_model_performance_model ON public.model_performance USING btree (model_id, evaluated_at);
+
+
+--
+-- Name: idx_model_training_dataset; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_model_training_dataset ON public.model_training USING btree (dataset_id);
+
+
+--
+-- Name: idx_prediction_battery_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_prediction_battery_time ON public.prediction_result USING btree (battery_id, predicted_at DESC);
+
+
+--
+-- Name: idx_prediction_model; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_prediction_model ON public.prediction_result USING btree (model_id);
+
+
+--
+-- Name: idx_recommendation_anomaly; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_recommendation_anomaly ON public.recommendation USING btree (anomaly_id);
+
+
+--
+-- Name: idx_recommendation_assessment; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_recommendation_assessment ON public.recommendation USING btree (assessment_id);
+
+
+--
+-- Name: idx_recommendation_role_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_recommendation_role_time ON public.recommendation USING btree (target_role, created_at DESC);
+
+
+--
+-- Name: idx_temperature_time_brin; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_temperature_time_brin ON public.temperature_reading USING brin (recorded_at);
+
+
+--
+-- Name: idx_temperature_value; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_temperature_value ON public.temperature_reading USING btree (temperature_c);
+
+
+--
+-- Name: risk_assessment trg_alert_on_risk; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_alert_on_risk AFTER INSERT ON public.risk_assessment FOR EACH ROW EXECUTE FUNCTION public.fn_create_alert_for_risk();
 
 
 --
@@ -1225,5 +1488,5 @@ ALTER TABLE ONLY public.training_dataset
 -- PostgreSQL database dump complete
 --
 
-\unrestrict F4RsGcp2iXQSREb7fpL8YVAhtjx16OkipYNgPGnKzCu7AEARycz0T62gpI2DJeL
+\unrestrict 37kgtAXZdEU389YfGUdmd2IvLe5XzimGApT8acnfwHJEH2f4uGoEwQVAzcO3P5c
 

@@ -56,3 +56,21 @@ CONTRIBUTING.md (ownership), .env.example, PROJECT_STATE.md
 
 ## Next Exact Action
 Step 2: Person 2 creates branch person2-backend-ml; Person 1 clones the repo and creates person1-frontend
+
+## Database Status - LATEST (replaces the earlier "Database Status" section)
+DONE: 23 tables, 6 views, 1 trigger, 54 indexes. Scripts are database/01 to database/16.
+- Tables: all 23 created with constraints and sample rows (sample rows are marked SAMPLE)
+- Views: v_live_accuracy, v_latest_risk, v_battery_overview, v_open_alerts, v_risk_distribution, v_chemistry_comparison
+- Trigger: trg_alert_on_risk creates an OPEN alert when a risk assessment is HIGH or CRITICAL
+- Indexes: 14 added in Step 20; Step 19 experiment (EXPLAIN ANALYZE) saved in database/index_experiment_output.txt
+- Transactions: demo in database/16_transaction_demo.sql, output in database/transaction_demo_output.txt
+- Schema reference: database/schema_snapshot.sql
+
+DEFERRED (needed for the DBMS IA report, not yet done):
+- ER diagram
+- Normalization / BCNF document
+- Optional: sample readings for PN-NCA-0001, GL-NMC-0001, FC-LFP-0001 (they have no temperature readings)
+- Optional: concurrency demo, backup and restore demo
+
+NOTE: Person 2 branch is named mahek_branch (the plan said person2-backend-ml).
+NEXT: FastAPI backend and ML.
