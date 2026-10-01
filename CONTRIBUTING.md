@@ -7,7 +7,7 @@ Golden rule: if you don't own a file, don't edit it without coordinating with th
 | frontend/ (incl. package.json) | Person 1 | Reads API contracts | No |
 | backend/ | Person 2 | Consumes the API | No |
 | database/ (schema, SQL) | Person 2 | Reads | No |
-| ml/ | Person 2 | Uses it via the API | No |
+| ml/ | Person 1 | Uses it via the API | No |
 | requirements.txt | Person 2 | - | No |
 | README.md | Person 1 (initially) | Requests changes | Controlled |
 | PROJECT_STATE.md, .gitignore, CONTRIBUTING.md | Coordinate first | Both | Controlled |
