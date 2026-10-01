@@ -13,6 +13,7 @@ Golden rule: if you don't own a file, don't edit it without coordinating with th
 | PROJECT_STATE.md, .gitignore, CONTRIBUTING.md | Coordinate first | Both | Controlled |
 | .env | Each person locally | Never committed | No |
 | .env.example | Person 2 | Reads | No |
+|ml/requirements.txt | Person 1 | Person 2 reads | No
 
 ## Rules
 1. Nobody works directly on `main`.
