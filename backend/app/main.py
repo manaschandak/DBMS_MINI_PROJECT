@@ -50,3 +50,6 @@ app.include_router(alerts_router)
 
 from app.routers.predictions import router as predictions_router
 app.include_router(predictions_router)
+
+from app.routers.models import router as models_router
+app.include_router(models_router)
