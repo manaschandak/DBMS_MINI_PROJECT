@@ -44,3 +44,6 @@ def health(db: Session = Depends(get_db)):
     return {"status": "ok", "database": "connected", "tables": tables}
 from app.routers.feedback import router as feedback_router
 app.include_router(feedback_router)
+
+from app.routers.alerts import router as alerts_router
+app.include_router(alerts_router)

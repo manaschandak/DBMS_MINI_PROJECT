@@ -1,88 +1,106 @@
-"""Alerts: list, view, acknowledge."""
-from typing import Literal, Optional
+"""Alerts: list by priority and acknowledge."""
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app import schemas_alerts as a
 from app.database import get_db
-from app.security import require_roles
+from app.schemas_alerts import AlertOut, PriorityCode
 
-router = APIRouter(prefix="/api", tags=["Alerts"])
+router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
-# Path from an alert to its battery: alert > risk_assessment > prediction_result > battery
-ALERT_SELECT = (
-    "SELECT a.alert_id, b.battery_id, b.serial_number, ap.priority_code, "
-    "ap.severity_level, ra.final_risk_level, a.message, a.status, "
-    "a.created_at, a.acknowledged_at "
-    "FROM alert a "
-    "JOIN alert_priority ap ON ap.alert_priority_id = a.alert_priority_id "
-    "JOIN risk_assessment ra ON ra.assessment_id = a.assessment_id "
-    "JOIN prediction_result pr ON pr.prediction_id = ra.prediction_id "
-    "JOIN battery b ON b.battery_id = pr.battery_id"
-)
+# Fixed SQL text only; every value is passed as a bound parameter.
+SELECT_SQL = """
+    SELECT a.alert_id, ap.priority_code, ap.severity_level,
+           b.battery_id, b.serial_number, m.risk_type, ra.final_risk_level,
+           a.message, a.status, a.created_at, a.acknowledged_at
+    FROM alert a
+    JOIN alert_priority ap    ON a.alert_priority_id = ap.alert_priority_id
+    JOIN risk_assessment ra   ON a.assessment_id = ra.assessment_id
+    JOIN prediction_result pr ON ra.prediction_id = pr.prediction_id
+    JOIN battery b            ON pr.battery_id = b.battery_id
+    JOIN ai_model m           ON pr.model_id = m.model_id
+"""
 
 
-@router.get("/alerts", response_model=list[a.AlertOut])
+@router.get("", response_model=list[AlertOut])
 def list_alerts(
-    status: Optional[Literal["OPEN", "ACKNOWLEDGED", "RESOLVED"]] = None,
-    battery_id: Optional[int] = Query(None, gt=0),
-    limit: int = Query(200, ge=1, le=1000),
+    status: Optional[str] = Query(None, pattern="^[A-Z_]{3,20}$"),
+    priority_code: Optional[PriorityCode] = None,
+    battery_id: Optional[int] = Query(None, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    where, params = [], {"limit": limit}
-    if status is not None:
-        where.append("a.status = :status")
+    """List alerts, most severe first, then newest. All filters are optional."""
+    conditions = []
+    params = {"limit": limit, "offset": offset}
+    if status:
+        conditions.append("a.status = :status")
         params["status"] = status
+    if priority_code:
+        conditions.append("ap.priority_code = :priority_code")
+        params["priority_code"] = priority_code
     if battery_id is not None:
-        where.append("b.battery_id = :bid")
-        params["bid"] = battery_id
-    sql = ALERT_SELECT
-    if where:
-        sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY ap.severity_level DESC, a.created_at DESC LIMIT :limit"
+        conditions.append("b.battery_id = :battery_id")
+        params["battery_id"] = battery_id
+    where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
     try:
-        return db.execute(text(sql), params).mappings().all()
-    except SQLAlchemyError:
-        raise HTTPException(status_code=503, detail="Database error")
-
-
-@router.get("/alerts/{alert_id}", response_model=a.AlertOut)
-def get_alert(alert_id: int, db: Session = Depends(get_db)):
-    row = db.execute(text(ALERT_SELECT + " WHERE a.alert_id = :id"),
-                     {"id": alert_id}).mappings().first()
-    if row is None:
-        raise HTTPException(status_code=404, detail="Alert not found")
-    return row
-
-
-@router.put("/alerts/{alert_id}/acknowledge", response_model=a.AlertOut)
-def acknowledge_alert(
-    alert_id: int,
-    user: dict = Depends(require_roles("ADMIN", "BMS_ENGINEER", "FLEET_OPERATOR", "SERVICE_TECHNICIAN")),
-    db: Session = Depends(get_db),
-):
-    """Only an OPEN alert can be acknowledged. Status and time are set together,
-    which is what the database rule chk_alert_ack_matches_status requires."""
-    try:
-        changed = db.execute(
-            text("UPDATE alert SET status = 'ACKNOWLEDGED', acknowledged_at = now() "
-                 "WHERE alert_id = :id AND status = 'OPEN' RETURNING alert_id"),
-            {"id": alert_id},
-        ).first()
-        db.commit()
+        rows = db.execute(
+            text(
+                SELECT_SQL
+                + where
+                + " ORDER BY ap.severity_level DESC, a.created_at DESC, a.alert_id DESC"
+                + " LIMIT :limit OFFSET :offset"
+            ),
+            params,
+        ).mappings().all()
     except SQLAlchemyError:
         db.rollback()
-        raise HTTPException(status_code=503, detail="Database error")
+        raise HTTPException(status_code=500, detail="Database error")
+    return [dict(row) for row in rows]
 
-    if changed is None:
-        exists = db.execute(text("SELECT status FROM alert WHERE alert_id = :id"),
-                            {"id": alert_id}).first()
-        if exists is None:
-            raise HTTPException(status_code=404, detail="Alert not found")
-        raise HTTPException(status_code=409,
-                            detail=f"Alert is already {exists.status.lower()}")
-    return db.execute(text(ALERT_SELECT + " WHERE a.alert_id = :id"),
-                      {"id": alert_id}).mappings().one()
+
+@router.get("/{alert_id}", response_model=AlertOut)
+def get_alert(alert_id: int, db: Session = Depends(get_db)):
+    try:
+        row = db.execute(
+            text(SELECT_SQL + " WHERE a.alert_id = :id"), {"id": alert_id}
+        ).mappings().first()
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Database error")
+    if row is None:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return dict(row)
+
+
+@router.put("/{alert_id}/acknowledge", response_model=AlertOut)
+def acknowledge_alert(alert_id: int, db: Session = Depends(get_db)):
+    """Mark an OPEN alert as ACKNOWLEDGED. One atomic UPDATE, so it cannot be done twice."""
+    try:
+        updated = db.execute(
+            text(
+                "UPDATE alert SET status = 'ACKNOWLEDGED', acknowledged_at = now() "
+                "WHERE alert_id = :id AND status = 'OPEN' RETURNING alert_id"
+            ),
+            {"id": alert_id},
+        ).first()
+        if updated is None:
+            exists = db.execute(
+                text("SELECT 1 FROM alert WHERE alert_id = :id"), {"id": alert_id}
+            ).first()
+            db.rollback()
+            if exists is None:
+                raise HTTPException(status_code=404, detail="Alert not found")
+            raise HTTPException(status_code=409, detail="Alert is not open (already acknowledged)")
+        db.commit()
+        row = db.execute(
+            text(SELECT_SQL + " WHERE a.alert_id = :id"), {"id": alert_id}
+        ).mappings().first()
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Database error")
+    return dict(row)
