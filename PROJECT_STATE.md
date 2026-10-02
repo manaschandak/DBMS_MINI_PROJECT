@@ -74,3 +74,9 @@ DEFERRED (needed for the DBMS IA report, not yet done):
 
 NOTE: Person 2 branch is named mahek_branch (the plan said person2-backend-ml).
 NEXT: FastAPI backend and ML.
+
+## Backend status (Person 2) - updated 2026-10-02
+- DONE: database (23 tables), routers for Steps 26-40a, login/roles, error format, CORS check, input limits (Steps 41a-41b).
+- TODO: Step 42 (pytest tests, one success + one failure per endpoint), Step 43 (README, endpoint list, ER/normalization notes).
+- BLOCKED on Person 1 (ml/, Steps 36-38): real model in backend/app/predictor.py (currently PLACEHOLDER_RULES, not ML), Step 40b retrain endpoint.
+- Unconfirmed: POST /api/model-performance/evaluate has not been verified end to end on PostgreSQL; Step 42 tests will cover it.
