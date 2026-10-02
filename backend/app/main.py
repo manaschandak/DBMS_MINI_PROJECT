@@ -47,3 +47,6 @@ app.include_router(feedback_router)
 
 from app.routers.alerts import router as alerts_router
 app.include_router(alerts_router)
+
+from app.routers.predictions import router as predictions_router
+app.include_router(predictions_router)
