@@ -44,9 +44,9 @@ class CoolantIn(BaseModel):
 
 
 class ReadingsBatch(BaseModel):
-    temperature: list[TemperatureIn] = []
-    electrical: list[ElectricalIn] = []
-    coolant: list[CoolantIn] = []
+    temperature: list[TemperatureIn] = Field(default_factory=list, max_length=1000)
+    electrical: list[ElectricalIn] = Field(default_factory=list, max_length=1000)
+    coolant: list[CoolantIn] = Field(default_factory=list, max_length=1000)
 
     @model_validator(mode="after")
     def check_size(self):
