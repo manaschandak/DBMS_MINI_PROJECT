@@ -53,3 +53,6 @@ app.include_router(predictions_router)
 
 from app.routers.models import router as models_router
 app.include_router(models_router)
+
+from app.errors import register_error_handlers
+register_error_handlers(app)
