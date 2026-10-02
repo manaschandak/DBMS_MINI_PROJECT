@@ -42,3 +42,5 @@ def health(db: Session = Depends(get_db)):
     except SQLAlchemyError:
         raise HTTPException(status_code=503, detail="Database connection failed")
     return {"status": "ok", "database": "connected", "tables": tables}
+from app.routers.feedback import router as feedback_router
+app.include_router(feedback_router)
