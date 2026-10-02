@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.routers import aging, auth, batteries, reference, sensors, twins
+from app.routers import aging, analytics, auth, batteries, reference, sensors, twins
 
 app = FastAPI(title="Battery Thermal Management API", version="0.1.0")
 
@@ -24,6 +24,7 @@ app.include_router(sensors.router)
 app.include_router(twins.router)
 app.include_router(aging.router)
 app.include_router(auth.router)
+app.include_router(analytics.router)
 
 
 @app.get("/api/health")
