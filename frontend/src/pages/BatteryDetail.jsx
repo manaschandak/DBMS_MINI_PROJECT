@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
+import { useParams, Link } from "react-router-dom";
+import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, ResponsiveContainer } from "recharts";
 import { api } from "../api/client";
+import RiskBadge from "../components/RiskBadge";
 
 export default function BatteryDetail() {
   const { id } = useParams();
   const [data, setData] = useState([]);
-  useEffect(() => { api.getReadings(id).then(setData); }, [id]);
+  const [battery, setBattery] = useState(null);
+
+  useEffect(() => {
+    api.getReadings(id).then(setData);
+    api.getBatteries().then((list) => setBattery(list.find((b) => b.id === Number(id))));
+  }, [id]);
 
   return (
     <div>

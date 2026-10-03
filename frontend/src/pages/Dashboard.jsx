@@ -3,9 +3,15 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import RiskBadge from "../components/RiskBadge";
 
+const order = { high: 0, medium: 1, low: 2 };
+const gaugePos = (t) => Math.min(100, Math.max(0, ((t - 20) / 50) * 100));
+
 export default function Dashboard() {
   const [rows, setRows] = useState([]);
   useEffect(() => { api.getBatteries().then(setRows); }, []);
+
+  const sorted = [...rows].sort((a, b) => order[a.risk_level] - order[b.risk_level]);
+  const count = (l) => rows.filter((b) => b.risk_level === l).length;
 
   return (
     <div>

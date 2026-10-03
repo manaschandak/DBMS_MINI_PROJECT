@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import RiskBadge from "../components/RiskBadge";
 
@@ -13,7 +14,10 @@ export default function Alerts() {
 
   return (
     <div>
-      <h2>Alerts</h2>
+      <h1>Alerts</h1>
+      <div className="muted" style={{ marginBottom: 18 }}>
+        Your answers help the model learn which alerts were real.
+      </div>
       {items.map((a) => (
         <div key={a.id} className={`alert ${a.risk_level}`}>
           <div className="alert-top">
