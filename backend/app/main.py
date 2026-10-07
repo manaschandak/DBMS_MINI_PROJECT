@@ -45,8 +45,6 @@ def health(db: Session = Depends(get_db)):
 from app.routers.feedback import router as feedback_router
 app.include_router(feedback_router)
 
-from app.routers.alerts import router as alerts_router
-app.include_router(alerts_router)
 
 from app.routers.predictions import router as predictions_router
 app.include_router(predictions_router)
@@ -56,3 +54,6 @@ app.include_router(models_router)
 
 from app.errors import register_error_handlers
 register_error_handlers(app)
+
+from app.routers.recommendations import router as recommendations_router
+app.include_router(recommendations_router)

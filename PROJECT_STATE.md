@@ -80,3 +80,10 @@ NEXT: FastAPI backend and ML.
 - TODO: Step 42 (pytest tests, one success + one failure per endpoint), Step 43 (README, endpoint list, ER/normalization notes).
 - BLOCKED on Person 1 (ml/, Steps 36-38): real model in backend/app/predictor.py (currently PLACEHOLDER_RULES, not ML), Step 40b retrain endpoint.
 - Unconfirmed: POST /api/model-performance/evaluate has not been verified end to end on PostgreSQL; Step 42 tests will cover it.
+
+## Risk thresholds (SUGGESTION, not from the Word document)
+- THERMAL (max_temp_c): below 40 LOW, below 50 MEDIUM, below 60 HIGH, 60 or above CRITICAL. Backend safety rule forces CRITICAL at 60 C or above.
+- HEALTH (capacity_pct): 90 or more LOW, 80 to below 90 MEDIUM, 70 to below 80 HIGH, below 70 CRITICAL.
+- Same thresholds are used in ml/generate_data.py (synthetic labels) and backend/app/predictor.py (fallback rules).
+- ML models are Random Forests trained on SYNTHETIC data (synthetic_threshold_rules_v1). Reported accuracy measures how well they recover these rules plus noise, not real-world battery failure prediction.
+- One shared threshold set for all chemistries (NMC, LFP, NCA); per-chemistry thresholds are future work.
