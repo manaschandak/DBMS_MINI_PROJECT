@@ -11,7 +11,7 @@ def _load(risk_type: str) -> dict:
     if risk_type not in _cache:
         path = _ART / f"{risk_type.lower()}_model.joblib"
         if not path.exists():
-            raise FileNotFoundError(f"{path} missing - run `python train.py` in ml/ first")
+            raise FileNotFoundError(f"{path} missing - run `python -m ml.train` from the project root first")
         _cache[risk_type] = joblib.load(path)
     return _cache[risk_type]
 

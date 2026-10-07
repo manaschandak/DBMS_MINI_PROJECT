@@ -29,3 +29,6 @@ Thumbs.db
 *.joblib
 
 *.csv
+
+ml/artifacts/*.joblib
+!ml/artifacts/.gitkeep
