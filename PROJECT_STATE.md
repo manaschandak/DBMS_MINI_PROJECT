@@ -56,3 +56,34 @@ CONTRIBUTING.md (ownership), .env.example, PROJECT_STATE.md
 
 ## Next Exact Action
 Step 2: Person 2 creates branch person2-backend-ml; Person 1 clones the repo and creates person1-frontend
+
+## Database Status - LATEST (replaces the earlier "Database Status" section)
+DONE: 23 tables, 6 views, 1 trigger, 54 indexes. Scripts are database/01 to database/16.
+- Tables: all 23 created with constraints and sample rows (sample rows are marked SAMPLE)
+- Views: v_live_accuracy, v_latest_risk, v_battery_overview, v_open_alerts, v_risk_distribution, v_chemistry_comparison
+- Trigger: trg_alert_on_risk creates an OPEN alert when a risk assessment is HIGH or CRITICAL
+- Indexes: 14 added in Step 20; Step 19 experiment (EXPLAIN ANALYZE) saved in database/index_experiment_output.txt
+- Transactions: demo in database/16_transaction_demo.sql, output in database/transaction_demo_output.txt
+- Schema reference: database/schema_snapshot.sql
+
+DEFERRED (needed for the DBMS IA report, not yet done):
+- ER diagram
+- Normalization / BCNF document
+- Optional: sample readings for PN-NCA-0001, GL-NMC-0001, FC-LFP-0001 (they have no temperature readings)
+- Optional: concurrency demo, backup and restore demo
+
+NOTE: Person 2 branch is named mahek_branch (the plan said person2-backend-ml).
+NEXT: FastAPI backend and ML.
+
+## Backend status (Person 2) - updated 2026-10-02
+- DONE: database (23 tables), routers for Steps 26-40a, login/roles, error format, CORS check, input limits (Steps 41a-41b).
+- TODO: Step 42 (pytest tests, one success + one failure per endpoint), Step 43 (README, endpoint list, ER/normalization notes).
+- BLOCKED on Person 1 (ml/, Steps 36-38): real model in backend/app/predictor.py (currently PLACEHOLDER_RULES, not ML), Step 40b retrain endpoint.
+- Unconfirmed: POST /api/model-performance/evaluate has not been verified end to end on PostgreSQL; Step 42 tests will cover it.
+
+## Risk thresholds (SUGGESTION, not from the Word document)
+- THERMAL (max_temp_c): below 40 LOW, below 50 MEDIUM, below 60 HIGH, 60 or above CRITICAL. Backend safety rule forces CRITICAL at 60 C or above.
+- HEALTH (capacity_pct): 90 or more LOW, 80 to below 90 MEDIUM, 70 to below 80 HIGH, below 70 CRITICAL.
+- Same thresholds are used in ml/generate_data.py (synthetic labels) and backend/app/predictor.py (fallback rules).
+- ML models are Random Forests trained on SYNTHETIC data (synthetic_threshold_rules_v1). Reported accuracy measures how well they recover these rules plus noise, not real-world battery failure prediction.
+- One shared threshold set for all chemistries (NMC, LFP, NCA); per-chemistry thresholds are future work.
