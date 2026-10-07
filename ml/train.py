@@ -34,7 +34,7 @@ def train_model(risk_type: str) -> dict:
         "algorithm": ALGORITHM,
         "dataset_name": DATASET_NAME + " (SYNTHETIC)",
         "sample_count": int(len(df)),
-        "test_count": int(len(y_te)),  # changed: new
+        "test_sample_count": int(len(y_te)),
         "accuracy": round(float(accuracy_score(y_te, pred)), 4),
         "macro_f1": round(float(f1_score(y_te, pred, average="macro")), 4),
         "recall_high_critical": round(recall_hc, 4),
