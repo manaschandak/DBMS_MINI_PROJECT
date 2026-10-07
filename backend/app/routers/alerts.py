@@ -2,6 +2,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from app.security import require_roles
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -78,7 +79,11 @@ def get_alert(alert_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{alert_id}/acknowledge", response_model=AlertOut)
-def acknowledge_alert(alert_id: int, db: Session = Depends(get_db)):
+def acknowledge_alert(
+    alert_id: int,
+    user: dict = Depends(require_roles("ADMIN", "BMS_ENGINEER", "FLEET_OPERATOR", "SERVICE_TECHNICIAN")),
+    db: Session = Depends(get_db),
+):
     """Mark an OPEN alert as ACKNOWLEDGED. One atomic UPDATE, so it cannot be done twice."""
     try:
         updated = db.execute(
